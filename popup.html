@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>WhatsApp Extractor</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --wa-gradient: linear-gradient(135deg, #10b981, #06b6d4);
+      --bg-color: #0f172a;
+      --card-color: #1e293b;
+      --text-color: #f8fafc;
+      --text-muted: #94a3b8;
+      --border-color: rgba(255, 255, 255, 0.08);
+      --primary-green: #10b981;
+    }
+
+    body {
+      width: 320px;
+      margin: 0;
+      padding: 0;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      font-family: 'Outfit', sans-serif;
+      box-sizing: border-box;
+    }
+
+    .container {
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .logo-container {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--wa-gradient);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3);
+    }
+
+    .logo-container svg {
+      width: 20px;
+      height: 20px;
+      fill: white;
+    }
+
+    .title {
+      font-size: 16px;
+      font-weight: 700;
+      margin: 0;
+      background: var(--wa-gradient);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .subtitle {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin: 0;
+    }
+
+    .instruction-card {
+      background-color: var(--card-color);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 14px;
+    }
+
+    .step-item {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .step-item:last-child {
+      margin-bottom: 0;
+    }
+
+    .step-num {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background-color: rgba(16, 185, 129, 0.15);
+      color: var(--primary-green);
+      font-weight: 700;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .step-text {
+      font-size: 12px;
+      line-height: 1.4;
+      color: var(--text-color);
+    }
+
+    .step-text strong {
+      color: var(--primary-green);
+    }
+
+    .open-btn {
+      background: var(--wa-gradient);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      padding: 12px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 4px 10px rgba(16, 185, 129, 0.2);
+      transition: all 0.2s ease;
+      width: 100%;
+    }
+
+    .open-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 15px rgba(16, 185, 129, 0.4);
+    }
+
+    .footer {
+      text-align: center;
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo-container">
+        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/>
+        </svg>
+      </div>
+      <div>
+        <h1 class="title">WhatsApp Extractor</h1>
+        <p class="subtitle">Extract numbers from storage</p>
+      </div>
+    </div>
+
+    <div class="instruction-card">
+      <div class="step-item">
+        <div class="step-num">1</div>
+        <div class="step-text">Click the button below to open <strong>WhatsApp Web</strong> in your browser.</div>
+      </div>
+      <div class="step-item">
+        <div class="step-num">2</div>
+        <div class="step-text">Look for the <strong>floating download button</strong> in the bottom right corner of the WhatsApp page.</div>
+      </div>
+      <div class="step-item">
+        <div class="step-num">3</div>
+        <div class="step-text">Open the sidebar, choose your contact source or active group, and download as <strong>Excel, CSV, or JSON</strong>.</div>
+      </div>
+    </div>
+
+    <button class="open-btn" id="open-wa-btn">
+      <span>Open WhatsApp Web</span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+        <polyline points="15 3 21 3 21 9"></polyline>
+        <line x1="10" y1="14" x2="21" y2="3"></line>
+      </svg>
+    </button>
+
+    <div class="footer">
+      Secured 100% Offline Local Processing
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
