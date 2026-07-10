@@ -91,6 +91,7 @@ async function getWhatsAppWebData() {
     const contacts = await readAllFromStore(db, 'contact');
     const groups = await readAllFromStore(db, 'group-metadata');
     const participantStore = await readAllFromStore(db, 'participant');
+    const verifiedBusinessNameStore = await readAllFromStore(db, 'verified-business-name');
     
     const myJid = getMyJid();
     db.close();
@@ -104,8 +105,29 @@ async function getWhatsAppWebData() {
       return String(id);
     };
 
+    // Construct verified business names map
+    const businessNamesMap = new Map();
+    if (verifiedBusinessNameStore.length > 0) {
+      verifiedBusinessNameStore.forEach(record => {
+        const bId = resolveJid(record.id);
+        if (bId && record.name) {
+          businessNamesMap.set(bId, record.name);
+        }
+      });
+    }
+
+    // Analyze contact properties to find name fields
+    let namedContactSample = 'None found';
+    const allKeys = new Set();
+    contacts.forEach(c => {
+      Object.keys(c).forEach(k => allKeys.add(k));
+    });
+    const sampleWithName = contacts.find(c => c.name || c.displayName || c.pushname || c.formattedName || c.shortName || c.verifiedName);
+    if (sampleWithName) {
+      namedContactSample = safeStringify(sampleWithName, 2);
+    }
+
     // Construct participant mapping
-    // Group participants are stored in 'participant' store with 'groupId' as key
     const groupParticipantsMap = new Map();
     const groupAdminsMap = new Map();
     
@@ -116,7 +138,6 @@ async function getWhatsAppWebData() {
           if (record.participants) {
             groupParticipantsMap.set(gId, record.participants);
           }
-          // Collect admins list
           const admins = new Set();
           if (record.admins) record.admins.forEach(a => admins.add(resolveJid(a)));
           if (record.superAdmins) record.superAdmins.forEach(a => admins.add(resolveJid(a)));
@@ -130,22 +151,30 @@ async function getWhatsAppWebData() {
       contacts: contacts.map(c => {
         const contactJid = resolveJid(c.id);
         const phoneJid = resolveJid(c.phoneNumber || c.id);
+        
+        // Read name fields dynamically
+        let nameVal = c.name || c.displayName || c.formattedName || c.shortName || '';
+        
+        // Fall back to verified business name map if name is empty
+        if (!nameVal) {
+          nameVal = businessNamesMap.get(contactJid) || businessNamesMap.get(phoneJid) || '';
+        }
+
+        const pushnameVal = c.pushname || c.verifiedName || '';
+
         return {
           id: contactJid,
           phoneId: phoneJid,
-          name: c.name || '',
-          pushname: c.pushname || '',
+          name: nameVal,
+          pushname: pushnameVal,
           isContact: c.isContact === true || c.isMyContact === true || c.isAddressBookContact === 1,
           isMe: c.isMe === true || contactJid === myJid || phoneJid === myJid
         };
       }),
       groups: groups.map(g => {
         const groupJid = resolveJid(g.id);
-        
-        // Retrieve participants list from either group-metadata or participant store
         let rawParticipants = g.participants || g.participantIds || groupParticipantsMap.get(groupJid) || [];
         
-        // If it's an object instead of array
         if (rawParticipants && typeof rawParticipants === 'object' && !Array.isArray(rawParticipants)) {
           rawParticipants = Object.values(rawParticipants);
         }
@@ -174,7 +203,13 @@ async function getWhatsAppWebData() {
           subject: g.subject || 'Unnamed Group',
           participants: mappedParticipants
         };
-      })
+      }),
+      debug: {
+        rawGroupSample: `All Contact Keys: ${Array.from(allKeys).join(', ')}\nVerified Business Names Count: ${verifiedBusinessNameStore.length}`,
+        rawContactSample: namedContactSample,
+        groupsCount: groups.length,
+        contactsCount: contacts.length
+      }
     };
   } catch (e) {
     if (db) db.close();
