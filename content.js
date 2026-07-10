@@ -70,6 +70,11 @@ let exportFormat = 'xlsx'; // xlsx, csv, json
 let searchQuery = '';
 let filteredResults = [];
 
+// Date Filter State
+let datePreset = 'lifetime'; // lifetime, 7days, 30days, custom
+let startDateVal = '';
+let endDateVal = '';
+
 // DOM Elements
 let fabEl = null;
 let overlayEl = null;
@@ -178,6 +183,30 @@ function createUI() {
               <!-- Loaded dynamically -->
             </optgroup>
           </select>
+        </div>
+
+        <!-- Date Filter Sub-section (Dynamic) -->
+        <div id="wa-date-filter-container" style="display: none; flex-direction: column; gap: 12px; background: rgba(255, 255, 255, 0.02); padding: 12px; border-radius: 10px; border: 1px solid var(--wa-border);">
+          <div>
+            <label class="wa-label" style="margin-bottom: 6px;">Last Active Range</label>
+            <select class="wa-select" id="wa-date-preset-select" style="padding: 8px 12px;">
+              <option value="lifetime">All Time (Lifetime)</option>
+              <option value="7days">Last 7 Days</option>
+              <option value="30days">Last 30 Days</option>
+              <option value="custom">Custom Date Range</option>
+            </select>
+          </div>
+          
+          <div id="wa-custom-date-range" style="display: none; gap: 10px; align-items: center;">
+            <div style="flex: 1;">
+              <label class="wa-label" style="font-size: 11px; margin-bottom: 4px;">Start Date</label>
+              <input type="date" class="wa-input" id="wa-start-date" style="padding: 6px 10px; font-size: 13px;">
+            </div>
+            <div style="flex: 1;">
+              <label class="wa-label" style="font-size: 11px; margin-bottom: 4px;">End Date</label>
+              <input type="date" class="wa-input" id="wa-end-date" style="padding: 6px 10px; font-size: 13px;">
+            </div>
+          </div>
         </div>
 
         <div class="wa-options-group">
@@ -292,7 +321,37 @@ function setupEventListeners() {
     } else {
       adminToggleContainer.style.display = 'none';
     }
+
+    // Toggle Date selector (only for active chats history list)
+    const dateFilterContainer = document.getElementById('wa-date-filter-container');
+    if (currentSource === 'chat-list') {
+      dateFilterContainer.style.display = 'flex';
+    } else {
+      dateFilterContainer.style.display = 'none';
+    }
     
+    updateResults();
+  });
+
+  // Date Preset Selector
+  document.getElementById('wa-date-preset-select').addEventListener('change', (e) => {
+    datePreset = e.target.value;
+    const customDateRange = document.getElementById('wa-custom-date-range');
+    if (datePreset === 'custom') {
+      customDateRange.style.display = 'flex';
+    } else {
+      customDateRange.style.display = 'none';
+    }
+    updateResults();
+  });
+
+  // Custom Date inputs
+  document.getElementById('wa-start-date').addEventListener('input', (e) => {
+    startDateVal = e.target.value;
+    updateResults();
+  });
+  document.getElementById('wa-end-date').addEventListener('input', (e) => {
+    endDateVal = e.target.value;
     updateResults();
   });
 
@@ -337,7 +396,6 @@ function toggleDrawer() {
   }
 }
 
-// Open and Reload Drawer
 function openDrawer() {
   fabEl.classList.add('active');
   overlayEl.classList.add('open');
@@ -425,6 +483,23 @@ function updateResults() {
     list = dbData.contacts.filter(c => !c.isContact && !c.isMe && c.id.endsWith('@c.us'));
   } else if (currentSource === 'chat-list') {
     // Extract numbers from active chat list (direct messages only, excluding groups/newsletters/broadcasts)
+    const nowSec = Math.floor(Date.now() / 1000);
+    let startSec = 0;
+    let endSec = Infinity;
+
+    if (datePreset === '7days') {
+      startSec = nowSec - (7 * 24 * 60 * 60);
+    } else if (datePreset === '30days') {
+      startSec = nowSec - (30 * 24 * 60 * 60);
+    } else if (datePreset === 'custom') {
+      if (startDateVal) {
+        startSec = Math.floor(new Date(startDateVal + 'T00:00:00').getTime() / 1000);
+      }
+      if (endDateVal) {
+        endSec = Math.floor(new Date(endDateVal + 'T23:59:59').getTime() / 1000);
+      }
+    }
+
     dbData.chats.forEach(chat => {
       const chatJid = chat.id;
       
@@ -433,6 +508,12 @@ function updateResults() {
           chatJid.endsWith('@broadcast') || 
           chatJid.endsWith('@newsletter') ||
           chatJid === 'status@broadcast') {
+        return;
+      }
+
+      // Filter by active range timestamp
+      const chatTime = chat.t || 0;
+      if (chatTime < startSec || chatTime > endSec) {
         return;
       }
 

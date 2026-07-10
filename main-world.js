@@ -93,6 +93,7 @@ async function getWhatsAppWebData() {
     const participantStore = await readAllFromStore(db, 'participant');
     const verifiedBusinessNameStore = await readAllFromStore(db, 'verified-business-name');
     const chats = await readAllFromStore(db, 'chat');
+    const messages = await readAllFromStore(db, 'message');
     
     const myJid = getMyJid();
     db.close();
@@ -113,6 +114,29 @@ async function getWhatsAppWebData() {
         const bId = resolveJid(record.id);
         if (bId && record.name) {
           businessNamesMap.set(bId, record.name);
+        }
+      });
+    }
+
+    // Map each thread to its first message timestamp
+    const firstMsgTimeMap = new Map();
+    if (messages.length > 0) {
+      messages.forEach(msg => {
+        if (!msg) return;
+        const fromJid = resolveJid(msg.from);
+        const toJid = resolveJid(msg.to);
+        const threadJid = (fromJid === myJid) ? toJid : fromJid;
+        
+        if (!threadJid || threadJid.endsWith('@g.us') || threadJid.endsWith('@broadcast') || threadJid.endsWith('@newsletter')) {
+          return;
+        }
+        
+        const t = msg.t || 0;
+        if (t > 0) {
+          const existing = firstMsgTimeMap.get(threadJid);
+          if (existing === undefined || t < existing) {
+            firstMsgTimeMap.set(threadJid, t);
+          }
         }
       });
     }
@@ -170,9 +194,15 @@ async function getWhatsAppWebData() {
           isMe: c.isMe === true || contactJid === myJid || phoneJid === myJid
         };
       }),
-      chats: chats.map(ch => ({
-        id: resolveJid(ch.id)
-      })),
+      chats: chats.map(ch => {
+        const chatId = resolveJid(ch.id);
+        // First message time falls back to last message time if no messages are cached
+        const firstMsgTime = firstMsgTimeMap.get(chatId) || ch.t || 0;
+        return {
+          id: chatId,
+          t: firstMsgTime
+        };
+      }),
       groups: groups.map(g => {
         const groupJid = resolveJid(g.id);
         let rawParticipants = g.participants || g.participantIds || groupParticipantsMap.get(groupJid) || [];
@@ -207,7 +237,7 @@ async function getWhatsAppWebData() {
         };
       }),
       debug: {
-        rawGroupSample: `All Contact Keys: ${Array.from(allKeys).join(', ')}\nVerified Business Names Count: ${verifiedBusinessNameStore.length}\nChats Count: ${chats.length}`,
+        rawGroupSample: `All Contact Keys: ${Array.from(allKeys).join(', ')}\nVerified Business Names Count: ${verifiedBusinessNameStore.length}\nChats Count: ${chats.length}\nCached Messages: ${messages.length}`,
         rawContactSample: namedContactSample,
         groupsCount: groups.length,
         contactsCount: contacts.length
