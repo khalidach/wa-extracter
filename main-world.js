@@ -92,6 +92,7 @@ async function getWhatsAppWebData() {
     const groups = await readAllFromStore(db, 'group-metadata');
     const participantStore = await readAllFromStore(db, 'participant');
     const verifiedBusinessNameStore = await readAllFromStore(db, 'verified-business-name');
+    const chats = await readAllFromStore(db, 'chat');
     
     const myJid = getMyJid();
     db.close();
@@ -152,10 +153,8 @@ async function getWhatsAppWebData() {
         const contactJid = resolveJid(c.id);
         const phoneJid = resolveJid(c.phoneNumber || c.id);
         
-        // Read name fields dynamically
         let nameVal = c.name || c.displayName || c.formattedName || c.shortName || '';
         
-        // Fall back to verified business name map if name is empty
         if (!nameVal) {
           nameVal = businessNamesMap.get(contactJid) || businessNamesMap.get(phoneJid) || '';
         }
@@ -171,6 +170,9 @@ async function getWhatsAppWebData() {
           isMe: c.isMe === true || contactJid === myJid || phoneJid === myJid
         };
       }),
+      chats: chats.map(ch => ({
+        id: resolveJid(ch.id)
+      })),
       groups: groups.map(g => {
         const groupJid = resolveJid(g.id);
         let rawParticipants = g.participants || g.participantIds || groupParticipantsMap.get(groupJid) || [];
@@ -205,7 +207,7 @@ async function getWhatsAppWebData() {
         };
       }),
       debug: {
-        rawGroupSample: `All Contact Keys: ${Array.from(allKeys).join(', ')}\nVerified Business Names Count: ${verifiedBusinessNameStore.length}`,
+        rawGroupSample: `All Contact Keys: ${Array.from(allKeys).join(', ')}\nVerified Business Names Count: ${verifiedBusinessNameStore.length}\nChats Count: ${chats.length}`,
         rawContactSample: namedContactSample,
         groupsCount: groups.length,
         contactsCount: contacts.length

@@ -49,6 +49,7 @@ function getCountryFromPhone(phone) {
 let dbData = {
   myJid: '',
   contacts: [],
+  chats: [],
   groups: [],
   debug: {
     rawGroupSample: '',
@@ -62,7 +63,7 @@ let dbData = {
 let contactMap = new Map();
 
 // Filter State
-let currentSource = 'all-saved'; // all-saved, all-unsaved, or group JID
+let currentSource = 'all-saved'; // all-saved, all-unsaved, chat-list, or group JID
 let excludeAdmins = false;
 let excludeMe = true;
 let exportFormat = 'xlsx'; // xlsx, csv, json
@@ -172,6 +173,7 @@ function createUI() {
           <select class="wa-select" id="wa-source-select">
             <option value="all-saved">All Saved Contacts</option>
             <option value="all-unsaved">All Unsaved Contacts</option>
+            <option value="chat-list">Active Chat List (Direct Messages)</option>
             <optgroup label="Groups" id="wa-groups-optgroup">
               <!-- Loaded dynamically -->
             </optgroup>
@@ -285,7 +287,7 @@ function setupEventListeners() {
     
     // Toggle Admins settings visibility (only for group exports)
     const adminToggleContainer = document.getElementById('wa-toggle-admins-container');
-    if (currentSource !== 'all-saved' && currentSource !== 'all-unsaved') {
+    if (currentSource !== 'all-saved' && currentSource !== 'all-unsaved' && currentSource !== 'chat-list') {
       adminToggleContainer.style.display = 'flex';
     } else {
       adminToggleContainer.style.display = 'none';
@@ -335,6 +337,7 @@ function toggleDrawer() {
   }
 }
 
+// Open and Reload Drawer
 function openDrawer() {
   fabEl.classList.add('active');
   overlayEl.classList.add('open');
@@ -369,7 +372,7 @@ async function loadData() {
     dbData.contacts.forEach(c => {
       contactMap.set(c.id, c);
       if (c.phoneId) {
-        contactMap.set(c.phoneId, c); // Map both LID and phone JID to the contact
+        contactMap.set(c.phoneId, c);
       }
     });
 
@@ -389,7 +392,7 @@ async function loadData() {
 
     // Fill Diagnostics
     const debug = dbData.debug || {};
-    document.getElementById('wa-debug-stats').textContent = `Groups in DB: ${dbData.groups.length}, Contacts: ${dbData.contacts.length}`;
+    document.getElementById('wa-debug-stats').textContent = `Groups: ${dbData.groups.length}, Chats: ${dbData.chats.length}, Contacts: ${dbData.contacts.length}`;
     document.getElementById('wa-debug-text').value = 
       `--- DB METADATA DIAGNOSTICS ---\n` +
       `Logged In User: ${dbData.myJid}\n\n` +
@@ -420,6 +423,40 @@ function updateResults() {
   } else if (currentSource === 'all-unsaved') {
     // Filter contacts that are NOT saved, excluding me and group records
     list = dbData.contacts.filter(c => !c.isContact && !c.isMe && c.id.endsWith('@c.us'));
+  } else if (currentSource === 'chat-list') {
+    // Extract numbers from active chat list (direct messages only, excluding groups/newsletters/broadcasts)
+    dbData.chats.forEach(chat => {
+      const chatJid = chat.id;
+      
+      // Skip groups, broadcasts, status, newsletter threads
+      if (chatJid.endsWith('@g.us') || 
+          chatJid.endsWith('@broadcast') || 
+          chatJid.endsWith('@newsletter') ||
+          chatJid === 'status@broadcast') {
+        return;
+      }
+
+      // Cross-reference chat with contact store
+      const contact = contactMap.get(chatJid);
+      const resolvedPhoneJid = (contact && contact.phoneId) ? contact.phoneId : chatJid;
+      
+      // Exclude me check
+      const cleanMe = dbData.myJid ? dbData.myJid.split('@')[0] : '';
+      const cleanP = chatJid.split('@')[0];
+      const cleanResolved = resolvedPhoneJid.split('@')[0];
+      const isMe = cleanP === cleanMe || cleanResolved === cleanMe || chatJid === dbData.myJid || resolvedPhoneJid === dbData.myJid;
+      
+      if (excludeMe && isMe) return;
+
+      list.push({
+        id: resolvedPhoneJid,
+        lid: chatJid,
+        name: contact ? contact.name : '',
+        pushname: contact ? contact.pushname : '',
+        isContact: contact ? contact.isContact : false,
+        isMe: isMe
+      });
+    });
   } else {
     // Group extraction
     isGroup = true;
@@ -429,14 +466,11 @@ function updateResults() {
     if (group) {
       activeGroupName = group.subject;
       group.participants.forEach(p => {
-        // Exclude admins if checked
         if (excludeAdmins && p.isAdmin) return;
 
-        // Cross-reference participant with contact store to get actual phone ID
         const contact = contactMap.get(p.id);
         const resolvedPhoneJid = (contact && contact.phoneId) ? contact.phoneId : p.id;
         
-        // Exclude me check (checking LID, phone JID, and raw digits)
         const cleanMe = dbData.myJid ? dbData.myJid.split('@')[0] : '';
         const cleanP = p.id ? p.id.split('@')[0] : '';
         const cleanResolved = resolvedPhoneJid ? resolvedPhoneJid.split('@')[0] : '';
@@ -550,6 +584,7 @@ function exportData() {
   const dataToExport = filteredResults.map(item => ({
     "Country": item.country,
     "Phone Number": `+${item.phoneNumber}`,
+    "Phone Number (no +)": item.phoneNumber,
     "Name": item.name,
     "Group Name": item.groupName,
     "Is in Contact": item.isSaved ? "true" : "false"
@@ -557,7 +592,8 @@ function exportData() {
 
   const timestamp = new Date().toISOString().slice(0, 10);
   const sourceName = currentSource === 'all-saved' ? 'saved_contacts' : 
-                     currentSource === 'all-unsaved' ? 'unsaved_contacts' : 'group_members';
+                     currentSource === 'all-unsaved' ? 'unsaved_contacts' : 
+                     currentSource === 'chat-list' ? 'chat_list_contacts' : 'group_members';
   const fileName = `whatsapp_${sourceName}_${timestamp}`;
 
   if (exportFormat === 'json') {
@@ -565,13 +601,14 @@ function exportData() {
     downloadFile(jsonString, 'application/json', `${fileName}.json`);
   } else if (exportFormat === 'csv') {
     // Generate CSV string with UTF-8 BOM
-    const headers = ["Country", "Phone Number", "Name", "Group Name", "Is in Contact"];
+    const headers = ["Country", "Phone Number", "Phone Number (no +)", "Name", "Group Name", "Is in Contact"];
     const csvRows = [headers.join(",")];
     
     dataToExport.forEach(row => {
       const values = [
         escapeCSV(row["Country"]),
         escapeCSV(row["Phone Number"]),
+        escapeCSV(row["Phone Number (no +)"]),
         escapeCSV(row["Name"]),
         escapeCSV(row["Group Name"]),
         escapeCSV(row["Is in Contact"])
