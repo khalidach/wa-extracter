@@ -76,7 +76,6 @@ let startDateVal = '';
 let endDateVal = '';
 
 // DOM Elements
-let fabEl = null;
 let overlayEl = null;
 let drawerEl = null;
 
@@ -89,7 +88,7 @@ if (document.readyState === 'loading') {
 
 function init() {
   // Prevent duplicate insertion
-  if (document.getElementById('wa-extractor-fab')) return;
+  if (document.getElementById('wa-extractor-drawer')) return;
   
   createUI();
   setupEventListeners();
@@ -114,23 +113,12 @@ function fetchWhatsAppWebData() {
 }
 
 function createUI() {
-  // 1. Create Floating Action Button (FAB)
-  fabEl = document.createElement('button');
-  fabEl.id = 'wa-extractor-fab';
-  fabEl.title = 'Open WhatsApp Number Extractor';
-  fabEl.innerHTML = `
-    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/>
-    </svg>
-  `;
-  document.body.appendChild(fabEl);
-
-  // 2. Create Overlay
+  // 1. Create Overlay
   overlayEl = document.createElement('div');
   overlayEl.id = 'wa-extractor-overlay';
   document.body.appendChild(overlayEl);
 
-  // 3. Create Sidebar Drawer
+  // 2. Create Sidebar Drawer
   drawerEl = document.createElement('div');
   drawerEl.id = 'wa-extractor-drawer';
   drawerEl.innerHTML = `
@@ -294,8 +282,7 @@ function createUI() {
 }
 
 function setupEventListeners() {
-  // Toggle Drawer
-  fabEl.addEventListener('click', toggleDrawer);
+  // Toggle Drawer via overlay and close button
   overlayEl.addEventListener('click', closeDrawer);
   document.getElementById('wa-extractor-close').addEventListener('click', closeDrawer);
 
@@ -385,6 +372,13 @@ function setupEventListeners() {
 
   // Export Trigger
   document.getElementById('wa-export-btn').addEventListener('click', exportData);
+
+  // Listen for messaging from background.js to toggle the drawer
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action === "toggleDrawer") {
+      toggleDrawer();
+    }
+  });
 }
 
 function toggleDrawer() {
@@ -397,14 +391,12 @@ function toggleDrawer() {
 }
 
 function openDrawer() {
-  fabEl.classList.add('active');
   overlayEl.classList.add('open');
   drawerEl.classList.add('open');
   loadData();
 }
 
 function closeDrawer() {
-  fabEl.classList.remove('active');
   overlayEl.classList.remove('open');
   drawerEl.classList.remove('open');
 }

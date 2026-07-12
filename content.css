@@ -192,7 +192,8 @@
 }
 
 /* Input Fields & Dropdowns */
-.wa-select, .wa-input {
+.wa-select,
+.wa-input {
   width: 100%;
   background: var(--wa-bg-card);
   border: 1px solid var(--wa-border);
@@ -206,7 +207,8 @@
   box-sizing: border-box;
 }
 
-.wa-select:focus, .wa-input:focus {
+.wa-select:focus,
+.wa-input:focus {
   border-color: var(--wa-primary);
 }
 
@@ -265,11 +267,11 @@
   border-radius: 50%;
 }
 
-input:checked + .wa-slider {
+input:checked+.wa-slider {
   background: var(--wa-gradient);
 }
 
-input:checked + .wa-slider:before {
+input:checked+.wa-slider:before {
   transform: translateX(20px);
 }
 
@@ -443,7 +445,9 @@ input:checked + .wa-slider:before {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Scrollbar Customization for Drawer and Containers */
