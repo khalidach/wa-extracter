@@ -123,19 +123,24 @@ async function getWhatsAppWebData() {
     if (messages.length > 0) {
       messages.forEach(msg => {
         if (!msg) return;
-        const fromJid = resolveJid(msg.from);
-        const toJid = resolveJid(msg.to);
-        const threadJid = (fromJid === myJid) ? toJid : fromJid;
+        const msgId = typeof msg.id === 'string' ? msg.id : resolveJid(msg.id);
+        const parts = msgId.split('_');
+        const remoteJid = parts[1] || '';
         
-        if (!threadJid || threadJid.endsWith('@g.us') || threadJid.endsWith('@broadcast') || threadJid.endsWith('@newsletter')) {
+        // If the conversation thread ID is a group, broadcast, or newsletter, skip it!
+        if (!remoteJid || 
+            remoteJid.endsWith('@g.us') || 
+            remoteJid.endsWith('@broadcast') || 
+            remoteJid.endsWith('@newsletter') ||
+            remoteJid === 'status@broadcast') {
           return;
         }
         
         const t = msg.t || 0;
         if (t > 0) {
-          const existing = firstMsgTimeMap.get(threadJid);
+          const existing = firstMsgTimeMap.get(remoteJid);
           if (existing === undefined || t < existing) {
-            firstMsgTimeMap.set(threadJid, t);
+            firstMsgTimeMap.set(remoteJid, t);
           }
         }
       });
@@ -196,13 +201,29 @@ async function getWhatsAppWebData() {
       }),
       chats: chats.map(ch => {
         const chatId = resolveJid(ch.id);
-        // First message time falls back to last message time if no messages are cached
-        const firstMsgTime = firstMsgTimeMap.get(chatId) || ch.t || 0;
+        const lastMsgTime = ch.t || 0;
+        
+        // Skip groups, broadcasts, newsletters
+        if (!chatId || 
+            chatId.endsWith('@g.us') || 
+            chatId.endsWith('@broadcast') || 
+            chatId.endsWith('@newsletter') ||
+            chatId === 'status@broadcast') {
+          return null;
+        }
+
+        const firstMsgTime = firstMsgTimeMap.get(chatId) || lastMsgTime;
+        
+        // If there's no last message timestamp and no messages, this is an inactive chat record placeholder
+        if (firstMsgTime <= 0) {
+          return null;
+        }
+
         return {
           id: chatId,
           t: firstMsgTime
         };
-      }),
+      }).filter(ch => ch !== null),
       groups: groups.map(g => {
         const groupJid = resolveJid(g.id);
         let rawParticipants = g.participants || g.participantIds || groupParticipantsMap.get(groupJid) || [];
