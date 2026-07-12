@@ -63,7 +63,7 @@ let dbData = {
 let contactMap = new Map();
 
 // Filter State
-let currentSource = 'all-saved'; // all-saved, all-unsaved, chat-list, or group JID
+let currentSource = 'all-saved'; // all-saved, all-unsaved, chat-list, multiple-groups, or group JID
 let excludeAdmins = false;
 let excludeMe = true;
 let exportFormat = 'xlsx'; // xlsx, csv, json
@@ -167,6 +167,7 @@ function createUI() {
             <option value="all-saved">All Saved Contacts</option>
             <option value="all-unsaved">All Unsaved Contacts</option>
             <option value="chat-list">Active Chat List (Direct Messages)</option>
+            <option value="multiple-groups">Selected Groups (Multiple)</option>
             <optgroup label="Groups" id="wa-groups-optgroup">
               <!-- Loaded dynamically -->
             </optgroup>
@@ -194,6 +195,21 @@ function createUI() {
               <label class="wa-label" style="font-size: 11px; margin-bottom: 4px;">End Date</label>
               <input type="date" class="wa-input" id="wa-end-date" style="padding: 6px 10px; font-size: 13px;">
             </div>
+          </div>
+        </div>
+
+        <!-- Multiple Groups Checklist (Dynamic) -->
+        <div id="wa-groups-checklist-container" style="display: none; flex-direction: column; gap: 10px; background: rgba(255, 255, 255, 0.02); padding: 12px; border-radius: 10px; border: 1px solid var(--wa-border); max-height: 200px; overflow-y: auto;">
+          <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--wa-border); padding-bottom: 6px; margin-bottom: 4px;">
+            <label class="wa-label" style="margin: 0; font-weight: 700;">Check Groups to Extract</label>
+            <div style="display: flex; gap: 8px;">
+              <button id="wa-groups-select-all" style="background: none; border: none; color: var(--wa-primary); font-size: 11px; cursor: pointer; padding: 0; font-family: var(--wa-font); font-weight: 600;">Select All</button>
+              <span style="color: var(--wa-border); font-size: 11px;">|</span>
+              <button id="wa-groups-deselect-all" style="background: none; border: none; color: var(--wa-text-muted); font-size: 11px; cursor: pointer; padding: 0; font-family: var(--wa-font); font-weight: 600;">Clear</button>
+            </div>
+          </div>
+          <div id="wa-groups-checklist" style="display: flex; flex-direction: column; gap: 8px;">
+            <!-- Checkboxes generated dynamically -->
           </div>
         </div>
 
@@ -303,7 +319,9 @@ function setupEventListeners() {
     
     // Toggle Admins settings visibility (only for group exports)
     const adminToggleContainer = document.getElementById('wa-toggle-admins-container');
-    if (currentSource !== 'all-saved' && currentSource !== 'all-unsaved' && currentSource !== 'chat-list') {
+    const isGroupSelected = (currentSource !== 'all-saved' && currentSource !== 'all-unsaved' && currentSource !== 'chat-list');
+    
+    if (isGroupSelected) {
       adminToggleContainer.style.display = 'flex';
     } else {
       adminToggleContainer.style.display = 'none';
@@ -316,7 +334,28 @@ function setupEventListeners() {
     } else {
       dateFilterContainer.style.display = 'none';
     }
+
+    // Toggle Groups Checklist
+    const groupsChecklistContainer = document.getElementById('wa-groups-checklist-container');
+    if (currentSource === 'multiple-groups') {
+      groupsChecklistContainer.style.display = 'flex';
+    } else {
+      groupsChecklistContainer.style.display = 'none';
+    }
     
+    updateResults();
+  });
+
+  // Checklist Helpers
+  document.getElementById('wa-groups-select-all').addEventListener('click', () => {
+    const checkboxes = document.querySelectorAll('.wa-group-checkbox');
+    checkboxes.forEach(cb => cb.checked = true);
+    updateResults();
+  });
+
+  document.getElementById('wa-groups-deselect-all').addEventListener('click', () => {
+    const checkboxes = document.querySelectorAll('.wa-group-checkbox');
+    checkboxes.forEach(cb => cb.checked = false);
     updateResults();
   });
 
@@ -426,18 +465,45 @@ async function loadData() {
       }
     });
 
-    // Populate Groups Dropdown
+    // Populate Groups Dropdown (Single Select)
     const groupsGroup = document.getElementById('wa-groups-optgroup');
     groupsGroup.innerHTML = '';
     
+    // Populate Groups Checklist (Multi Select)
+    const groupsChecklist = document.getElementById('wa-groups-checklist');
+    groupsChecklist.innerHTML = '';
+
     // Sort groups alphabetically
     const sortedGroups = [...dbData.groups].sort((a, b) => a.subject.localeCompare(b.subject));
     
     sortedGroups.forEach(g => {
+      // Option for dropdown
       const option = document.createElement('option');
       option.value = g.id;
       option.textContent = `${g.subject} (${g.participants.length} members)`;
       groupsGroup.appendChild(option);
+
+      // Row for Checklist
+      const label = document.createElement('label');
+      label.className = 'wa-checklist-item';
+      label.style.display = 'flex';
+      label.style.alignItems = 'center';
+      label.style.gap = '8px';
+      label.style.fontSize = '12px';
+      label.style.cursor = 'pointer';
+      label.style.padding = '4px 0';
+      label.style.color = 'var(--wa-text-main)';
+      label.style.userSelect = 'none';
+      label.innerHTML = `
+        <input type="checkbox" class="wa-group-checkbox" value="${g.id}" style="cursor: pointer;">
+        <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 360px;" title="${escapeHTML(g.subject)}">
+          ${escapeHTML(g.subject)} <span style="color: var(--wa-text-muted); font-size: 11px;">(${g.participants.length})</span>
+        </span>
+      `;
+      
+      // Update results on individual checks
+      label.querySelector('input').addEventListener('change', updateResults);
+      groupsChecklist.appendChild(label);
     });
 
     // Fill Diagnostics
@@ -465,7 +531,9 @@ async function loadData() {
 function updateResults() {
   let list = [];
   let isGroup = false;
-  let activeGroupName = '';
+  
+  // A Map to store resolved items: resolvedPhoneJid -> item (for deduplication across multiple groups)
+  const itemMap = new Map();
 
   if (currentSource === 'all-saved') {
     // Filter contacts that are saved (isContact === true), excluding me and group records
@@ -527,11 +595,58 @@ function updateResults() {
         name: contact ? contact.name : '',
         pushname: contact ? contact.pushname : '',
         isContact: contact ? contact.isContact : false,
-        isMe: isMe
+        isMe: isMe,
+        groupName: 'N/A'
       });
     });
+  } else if (currentSource === 'multiple-groups') {
+    // Multi-group extraction
+    isGroup = true;
+    
+    // Find all checked groups
+    const checkedBoxes = document.querySelectorAll('.wa-group-checkbox:checked');
+    const selectedGroupJids = Array.from(checkedBoxes).map(cb => cb.value);
+
+    selectedGroupJids.forEach(groupJid => {
+      const group = dbData.groups.find(g => g.id === groupJid);
+      if (group) {
+        group.participants.forEach(p => {
+          if (excludeAdmins && p.isAdmin) return;
+
+          const contact = contactMap.get(p.id);
+          const resolvedPhoneJid = (contact && contact.phoneId) ? contact.phoneId : p.id;
+          
+          const cleanMe = dbData.myJid ? dbData.myJid.split('@')[0] : '';
+          const cleanP = p.id ? p.id.split('@')[0] : '';
+          const cleanResolved = resolvedPhoneJid ? resolvedPhoneJid.split('@')[0] : '';
+          const isMe = cleanP === cleanMe || cleanResolved === cleanMe || p.id === dbData.myJid || resolvedPhoneJid === dbData.myJid;
+          
+          if (excludeMe && isMe) return;
+
+          // Deduplicate and accumulate group subjects
+          if (itemMap.has(resolvedPhoneJid)) {
+            const existing = itemMap.get(resolvedPhoneJid);
+            if (!existing.groupNames.includes(group.subject)) {
+              existing.groupNames.push(group.subject);
+            }
+          } else {
+            itemMap.set(resolvedPhoneJid, {
+              id: resolvedPhoneJid,
+              lid: p.id,
+              name: contact ? contact.name : '',
+              pushname: contact ? contact.pushname : '',
+              isContact: contact ? contact.isContact : false,
+              isMe: isMe,
+              groupNames: [group.subject]
+            });
+          }
+        });
+      }
+    });
+
+    list = Array.from(itemMap.values());
   } else {
-    // Group extraction
+    // Single Group extraction
     isGroup = true;
     const groupJid = currentSource;
     const group = dbData.groups.find(g => g.id === groupJid);
@@ -557,7 +672,8 @@ function updateResults() {
           name: contact ? contact.name : '',
           pushname: contact ? contact.pushname : '',
           isContact: contact ? contact.isContact : false,
-          isMe: isMe
+          isMe: isMe,
+          groupName: activeGroupName
         });
       });
     }
@@ -577,11 +693,17 @@ function updateResults() {
       resolvedName = item.pushname.trim();
     }
 
+    // Resolve group name(s)
+    let gName = 'N/A';
+    if (isGroup) {
+      gName = item.groupNames ? item.groupNames.join(', ') : (item.groupName || 'N/A');
+    }
+
     return {
       country: country,
       phoneNumber: cleanNumber,
       name: resolvedName || 'N/A',
-      groupName: isGroup ? activeGroupName : 'N/A',
+      groupName: gName,
       isSaved: item.isContact
     };
   });
@@ -666,7 +788,8 @@ function exportData() {
   const timestamp = new Date().toISOString().slice(0, 10);
   const sourceName = currentSource === 'all-saved' ? 'saved_contacts' : 
                      currentSource === 'all-unsaved' ? 'unsaved_contacts' : 
-                     currentSource === 'chat-list' ? 'chat_list_contacts' : 'group_members';
+                     currentSource === 'chat-list' ? 'chat_list_contacts' : 
+                     currentSource === 'multiple-groups' ? 'multi_groups_contacts' : 'group_members';
   const fileName = `whatsapp_${sourceName}_${timestamp}`;
 
   if (exportFormat === 'json') {
